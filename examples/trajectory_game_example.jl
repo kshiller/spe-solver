@@ -11,7 +11,7 @@ constraints g̃ and h̃ incorporate dynamic feasibility, fixed initial condition
 state limits, environment boundaries, and collision-avoidance.
 """
 
-using RPOsim
+using SPEsim
 using LazySets: LazySets
 using TrajectoryGamesBase:
     TrajectoryGamesBase,

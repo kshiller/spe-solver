@@ -10,12 +10,12 @@ To activate this simulators's package:
 julia> ]
 pkg> activate .
   Activating environment at `<path to repo>/Project.toml`
-(RPOsim) pkg>
+(SPEsim) pkg>
 ```
 Now exit package mode by hitting the `[delete]` key. You should see the regular Julia REPL prompt. Type:
 ```console
 julia> using Revise
-julia> using RPOsim
+julia> using SPEsim
 ```
 
 
@@ -36,7 +36,7 @@ This currently contains no additional tests from Assignment 5. May be used in th
 To run tests locally in the REPL:
 ```console
 julia> ]
-(RPOsim) pkg> test
+(SPEsim) pkg> test
 ```
 
 Alternatively:

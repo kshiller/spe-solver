@@ -1,4 +1,4 @@
-using RPOsim
+using SPEsim
 using Test: @testset, @test
 using BlockArrays: Block
 

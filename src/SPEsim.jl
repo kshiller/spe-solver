@@ -1,4 +1,4 @@
-module RPOsim
+module SPEsim
 
 using Symbolics: Symbolics, @variables
 using ParametricMCPs: ParametricMCPs, ParametricMCP
