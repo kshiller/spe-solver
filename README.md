@@ -1,4 +1,4 @@
-# Spacecraft Pursuit-Evasion Game with Sun Lighting
+# Spacecraft Pursuit-Evasion Game with Sun Angle Considerations
 This code simulates a spacecraft pursuit-evasion (SPE) game between two players.
 
 This repository is heavily based on Assignment 5 from ASE 389: Game-Theoretic Modeling for Multi-Agent Systems at UT Austin.
@@ -20,12 +20,16 @@ julia> using SPEsim
 
 
 ## Examples
-The `examples/trajectory_game_example.jl` file encodes a trajectory game as a MCP, using the implementation in `src/parametric_game.jl`.:
+The `examples/trajectory_game_example.jl` file encodes a basic trajectory game as a MCP, using the implementation in `src/parametric_game.jl`:
 
 ```console
 julia> includet("examples/trajectory_game_example.jl")
 julia> (; sim_steps, game) = main();
 ```
+
+Substitute `trajectory_game_example.jl` with:
+- `spe_game_base.jl` for a basic SPE game
+- `spe_game_sunangle.jl` for a SPE game with sun angle considerations
 
 This will create a video of the animated result called `sim_steps.mp4`.
 
