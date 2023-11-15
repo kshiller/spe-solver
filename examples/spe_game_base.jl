@@ -50,7 +50,9 @@ using LinearAlgebra: norm_sqr, norm, dot, I
 using ProgressMeter: ProgressMeter
 
 "Utility to set up a (two player) SPE game."
-function setup_trajectory_game(; environment = PolygonEnvironment(5, 4)) #TODO! create proper environment
+function setup_trajectory_game(; environment = PolygonEnvironment(4, 5)) #TODO! make environment larger once dynamics updated
+    # PolygonEnvironment(num_sides, radius)
+    #NOTE: The environment here inherently imposes state constraints and is used for visualization.
     cost = let
         function stage_cost(x, u, t, θ)
             x1, x2 = blocks(x)
@@ -58,7 +60,7 @@ function setup_trajectory_game(; environment = PolygonEnvironment(5, 4)) #TODO! 
 
             #: Define cost structure
             Q       = Matrix(1I, length(x1), length(x1))
-            R       = Matrix(1I, length(u1), length(u1)) * 1e8
+            R       = Matrix(1I, length(u1), length(u1)) * 1e-2 #TODO! correct to 1e8 when completed testing
             gam_sq  = 2
             x_diff  = x1 - x2
             cost    = dot(x_diff, Q * x_diff) + dot(u1, R * u1) - gam_sq * dot(u2, R * u2)
@@ -66,7 +68,7 @@ function setup_trajectory_game(; environment = PolygonEnvironment(5, 4)) #TODO! 
             #: P1 (pursuer) wants to minimize cost, and P2 (evader) wants to maximize cost.
             [
                 cost,
-                -cost,
+                -cost, #TODO! verify this is correct
             ]
 
             # # P1 wants to go fast, and P2 wants to be close to P1.
@@ -89,19 +91,35 @@ function setup_trajectory_game(; environment = PolygonEnvironment(5, 4)) #TODO! 
 
             #TODO! update coupled constraints; there may be none! see other constraints below
             # Players need to stay at least 1 m away from one another.
-            norm_sqr(x1[1:2] - x2[1:2]) - 1
+            norm_sqr(x1[1:2] - x2[1:2]) - 0#1
         end
     end
 
-    #TODO! update dynamics to HCW model
-    #TODO! update state and control bounds (if applicable)
+    #: Define HCW dynamics #TODO! update dynamics to HCW model
+    SMA     = 15000 # km (virtual reference semi-major axis)
+    mu      = 3.986e5 # km^3/s^2 (gravitational parameter)
+    n       = sqrt(mu / SMA^3) # rad/s (mean motion)
+    mass    = 1 # kg (mass of spacecraft, assumed constant/same for both sats) #TODO! maybe differ btwn players?
+    A = zeros(6, 6)
+    A[1:3, 4:6] = Matrix(1I, 3, 3)
+    A[4,1]      = 3*n^2
+    A[4,5]      = 2*n
+    A[5,4]      = -2*n
+    A[6,3]      = -n^2
+    B = zeros(6, 3)
+    B[4:6,1:3]  = Matrix(1I, 3, 3) * 1/mass
+    println(A, B)
+
+    # agent_dynamics = time_invariant_linear_dynamics(; A, B, horizon = ∞, bounds...)
+
     agent_dynamics = planar_double_integrator(;
-        state_bounds = (; lb = [-Inf, -Inf, -5, -5], ub = [Inf, Inf, 5, 5]),
-        control_bounds = (; lb = [-10, -10], ub = [10, 10]),
+        state_bounds = (; lb = [-Inf, -Inf, -50, -50], ub = [Inf, Inf, 50, 50]),
+        control_bounds = (; lb = [-100, -100], ub = [100, 100]),
     )
+    
     dynamics = ProductDynamics([agent_dynamics for _ in 1:2])
 
-    TrajectoryGame(dynamics, cost, environment, coupling_constraints)
+    TrajectoryGame(dynamics, cost, environment, coupling_constraints) #TODO! update control bounds somewhere
 end
 
 "Utility for unpacking trajectory."
@@ -340,7 +358,7 @@ function main(;
     initial_state = mortar([[-1, 2.5, -0.05, -0.05], [1, 2.8, -0.05, -0.05]]), #TODO! update initial state
     horizon = 10, #TODO! update horizon (like sliding window horizon in MPC)
 )
-    environment = PolygonEnvironment(5, 4) #TODO! create proper environment
+    environment = PolygonEnvironment(4, 5) #TODO! create proper environment
     game = setup_trajectory_game(; environment)
     parametric_game = build_parametric_game(; game, horizon)
 
