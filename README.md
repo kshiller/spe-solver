@@ -20,16 +20,14 @@ julia> using SPEsim
 
 
 ## Examples
-The `examples/trajectory_game_example.jl` file encodes a basic trajectory game as a MCP, using the implementation in `src/parametric_game.jl`:
+The `examples/spe_game_base.jl` file encodes a basic trajectory game as a MCP, using the implementation in `src/parametric_game.jl`:
 
 ```console
-julia> includet("examples/trajectory_game_example.jl")
+julia> includet("examples/spe_game_base.jl")
 julia> (; sim_steps, game) = main();
 ```
 
-Substitute `trajectory_game_example.jl` with:
-- `spe_game_base.jl` for a basic SPE game
-- `spe_game_sunangle.jl` for a SPE game with sun angle considerations
+Substitute `spe_game_base.jl` with `spe_game_sunangle.jl` for a SPE game with sun angle considerations
 
 This will create a video of the animated result called `sim_steps.mp4`.
 

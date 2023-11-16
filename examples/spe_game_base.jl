@@ -50,7 +50,7 @@ using LinearAlgebra: norm_sqr, norm, dot, I
 using ProgressMeter: ProgressMeter
 
 "Utility to set up a (two player) SPE game."
-function setup_trajectory_game(; environment = PolygonEnvironment(4, 5)) #TODO! make environment larger once dynamics updated
+function setup_trajectory_game(; environment = PolygonEnvironment(4, 300)) #TODO! find suitable default environment
     # PolygonEnvironment(num_sides, radius)
     #NOTE: The environment here inherently imposes state constraints and is used for visualization.
     cost = let
@@ -68,7 +68,7 @@ function setup_trajectory_game(; environment = PolygonEnvironment(4, 5)) #TODO! 
             #: P1 (pursuer) wants to minimize cost, and P2 (evader) wants to maximize cost.
             [
                 cost,
-                -cost, #TODO! verify this is correct
+                -cost, #TODO! verify this is correct implementation
             ]
 
             # # P1 wants to go fast, and P2 wants to be close to P1.
@@ -95,11 +95,11 @@ function setup_trajectory_game(; environment = PolygonEnvironment(4, 5)) #TODO! 
         end
     end
 
-    #: Define HCW dynamics #TODO! update dynamics to HCW model
+    #: Define HCW dynamics
     SMA     = 15000 # km (virtual reference semi-major axis)
     mu      = 3.986e5 # km^3/s^2 (gravitational parameter)
-    n       = sqrt(mu / SMA^3) # rad/s (mean motion)
-    mass    = 1 # kg (mass of spacecraft, assumed constant/same for both sats) #TODO! maybe differ btwn players?
+    n       = sqrt(mu / SMA^3) # rad/s (virtual reference mean motion)
+    # mass    = 1 # kg (mass of spacecraft, assumed constant/same for both sats)
     A = zeros(6, 6)
     A[1:3, 4:6] = Matrix(1I, 3, 3)
     A[4,1]      = 3*n^2
@@ -107,19 +107,23 @@ function setup_trajectory_game(; environment = PolygonEnvironment(4, 5)) #TODO! 
     A[5,4]      = -2*n
     A[6,3]      = -n^2
     B = zeros(6, 3)
-    B[4:6,1:3]  = Matrix(1I, 3, 3) * 1/mass
-    println(A, B)
+    B[4:6,1:3]  = Matrix(1I, 3, 3) #* 1/mass
 
-    # agent_dynamics = time_invariant_linear_dynamics(; A, B, horizon = ∞, bounds...)
+    #TODO! verify dynamics implementation
+    #TODO! update state/control bounds as needed
+    agent_dynamics = time_invariant_linear_dynamics(; A, B,
+                            state_bounds = (; lb = [-Inf, -Inf, -Inf, -50, -50, -50], ub = [Inf, Inf, Inf, 50, 50, 50]),
+                            control_bounds = (; lb = [-10, -10, -10], ub = [10, 10, 10])
+                            )
 
-    agent_dynamics = planar_double_integrator(;
-        state_bounds = (; lb = [-Inf, -Inf, -50, -50], ub = [Inf, Inf, 50, 50]),
-        control_bounds = (; lb = [-100, -100], ub = [100, 100]),
-    )
+    # agent_dynamics = planar_double_integrator(;
+    #     state_bounds = (; lb = [-Inf, -Inf, -50, -50], ub = [Inf, Inf, 50, 50]),
+    #     control_bounds = (; lb = [-100, -100], ub = [100, 100]),
+    # )
     
     dynamics = ProductDynamics([agent_dynamics for _ in 1:2])
 
-    TrajectoryGame(dynamics, cost, environment, coupling_constraints) #TODO! update control bounds somewhere
+    TrajectoryGame(dynamics, cost, environment, coupling_constraints)
 end
 
 "Utility for unpacking trajectory."
@@ -161,7 +165,6 @@ function build_parametric_game(; game = setup_trajectory_game(), horizon = 10)
     fs = [(τ, θ) -> player_cost(τ, θ, ii) for ii in 1:N]
 
     # Dummy individual constraints.
-    #TODO! update individual constraints to contain control limits
     gs = [(τ, θ) -> [0] for _ in 1:N]
     hs = [(τ, θ) -> [0] for _ in 1:N]
 
@@ -187,18 +190,16 @@ function build_parametric_game(; game = setup_trajectory_game(), horizon = 10)
             (; xs, us) = unpack_trajectory(τ; game.dynamics)
 
             # Collision-avoidance constriant.
-            #TODO! verify this
+            #TODO! verify once coupling_constraints updated
             h̃1 = game.coupling_constraints(xs, us, θ)
 
             # Environment boundaries.
-            #TODO! verify this is still valid after updating game environment
             env_constraints = TrajectoryGamesBase.get_constraints(game.env)
             h̃2 = mapreduce(vcat, xs) do x
                 env_constraints(x)
             end
 
             # Actuator/state limits.
-            #TODO! verify this is still valid after updating game dynamics; otherwise, add box constraints
             actuator_constraint = TrajectoryGamesBase.get_constraints_from_box_bounds(
                 control_bounds(game.dynamics),
             )
@@ -206,7 +207,6 @@ function build_parametric_game(; game = setup_trajectory_game(), horizon = 10)
                 actuator_constraint(u)
             end
 
-            #TODO! verify this is still valid after updating game dynamics; otherwise, add box constraints
             state_constraint =
                 TrajectoryGamesBase.get_constraints_from_box_bounds(state_bounds(game.dynamics))
             h̃4 = mapreduce(vcat, xs) do x
@@ -355,16 +355,16 @@ function Makie.convert_arguments(::Type{<:Makie.Series}, γ::OpenLoopStrategy)
 end
 
 function main(;
-    initial_state = mortar([[-1, 2.5, -0.05, -0.05], [1, 2.8, -0.05, -0.05]]), #TODO! update initial state
+    initial_state = mortar([[50, 50, 50, 0.01, 0.01, 0.01], [0, 0, 0, 0, 0, 0]]),
     horizon = 10, #TODO! update horizon (like sliding window horizon in MPC)
 )
-    environment = PolygonEnvironment(4, 5) #TODO! create proper environment
+    environment = PolygonEnvironment(4, 300) #TODO! create proper environment
     game = setup_trajectory_game(; environment)
     parametric_game = build_parametric_game(; game, horizon)
 
     turn_length = 3 #TODO! update turn length???
     sim_steps = let
-        n_sim_steps = 80 #TODO! update number of simulation steps
+        n_sim_steps = 2000 #TODO! update number of simulation steps
         progress = ProgressMeter.Progress(n_sim_steps)
         receding_horizon_strategy =
             WarmStartRecedingHorizonStrategy(; game, parametric_game, turn_length, horizon)
