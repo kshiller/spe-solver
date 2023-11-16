@@ -95,25 +95,30 @@ function setup_trajectory_game(; environment = PolygonEnvironment(4, 300)) #TODO
         end
     end
 
-    #: Define HCW dynamics
-    SMA     = 15000 # km (virtual reference semi-major axis)
-    mu      = 3.986e5 # km^3/s^2 (gravitational parameter)
-    n       = sqrt(mu / SMA^3) # rad/s (virtual reference mean motion)
-    # mass    = 1 # kg (mass of spacecraft, assumed constant/same for both sats)
-    A = zeros(6, 6)
-    A[1:3, 4:6] = Matrix(1I, 3, 3)
-    A[4,1]      = 3*n^2
-    A[4,5]      = 2*n
-    A[5,4]      = -2*n
-    A[6,3]      = -n^2
-    B = zeros(6, 3)
-    B[4:6,1:3]  = Matrix(1I, 3, 3) #* 1/mass
+    #: Define continuous HCW dynamics
+    SMA             = 15000 # km (virtual reference semi-major axis)
+    mu              = 3.986e5 # km^3/s^2 (gravitational parameter)
+    n               = sqrt(mu / SMA^3) # rad/s (virtual reference mean motion)
+    # mass            = 1 # kg (mass of spacecraft, assumed constant/same for both sats)
+    A_cts           = zeros(6, 6)
+    A_cts[1:3, 4:6] = Matrix(1I, 3, 3)
+    A_cts[4,1]      = 3*n^2
+    A_cts[4,5]      = 2*n
+    A_cts[5,4]      = -2*n
+    A_cts[6,3]      = -n^2
+    B_cts           = zeros(6, 3)
+    B_cts[4:6,1:3]  = Matrix(1I, 3, 3) #* 1/mass
+
+    #: Discretize dynamics
+    dt              = 1 # s (time step) #TODO! is this even legit? find timestep elsewhere
+    A_discrete      = Matrix(1I, 6, 6) + A_cts * dt
+    B_discrete      = B_cts * dt
 
     #TODO! verify dynamics implementation
     #TODO! update state/control bounds as needed
-    agent_dynamics = time_invariant_linear_dynamics(; A, B,
+    agent_dynamics = time_invariant_linear_dynamics(; A=A_discrete, B=B_discrete,
                             state_bounds = (; lb = [-Inf, -Inf, -Inf, -50, -50, -50], ub = [Inf, Inf, Inf, 50, 50, 50]),
-                            control_bounds = (; lb = [-10, -10, -10], ub = [10, 10, 10])
+                            control_bounds = (; lb = [-1, -1, -1], ub = [1, 1, 1])
                             )
 
     # agent_dynamics = planar_double_integrator(;
@@ -355,16 +360,16 @@ function Makie.convert_arguments(::Type{<:Makie.Series}, γ::OpenLoopStrategy)
 end
 
 function main(;
-    initial_state = mortar([[50, 50, 50, 0.01, 0.01, 0.01], [0, 0, 0, 0, 0, 0]]),
+    initial_state = mortar([[5, 5, 5, 0.01, 0.01, 0.01], [0, 0, 0, 0, 0, 0]]),
     horizon = 10, #TODO! update horizon (like sliding window horizon in MPC)
 )
-    environment = PolygonEnvironment(4, 300) #TODO! create proper environment
+    environment = PolygonEnvironment(4, 25) #TODO! create proper environment
     game = setup_trajectory_game(; environment)
     parametric_game = build_parametric_game(; game, horizon)
 
     turn_length = 3 #TODO! update turn length???
     sim_steps = let
-        n_sim_steps = 2000 #TODO! update number of simulation steps
+        n_sim_steps = 100 #TODO! update number of simulation steps
         progress = ProgressMeter.Progress(n_sim_steps)
         receding_horizon_strategy =
             WarmStartRecedingHorizonStrategy(; game, parametric_game, turn_length, horizon)
