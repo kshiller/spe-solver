@@ -121,12 +121,23 @@ function setup_trajectory_game(; environment = PolygonEnvironment(4, 300)) #TODO
                             control_bounds = (; lb = [-1, -1, -1], ub = [1, 1, 1])
                             )
 
+    p_dynamics = time_invariant_linear_dynamics(; A=A_discrete, B=B_discrete,
+                            state_bounds = (; lb = [-Inf, -Inf, -Inf, -50, -50, -50], ub = [Inf, Inf, Inf, 50, 50, 50]),
+                            control_bounds = (; lb = [-1, -1, -1], ub = [1, 1, 1])
+                            )
+
+    e_dynamics = time_invariant_linear_dynamics(; A=A_discrete, B=B_discrete,
+                            state_bounds = (; lb = [-Inf, -Inf, -Inf, -50, -50, -50], ub = [Inf, Inf, Inf, 50, 50, 50]),
+                            control_bounds = (; lb = [-0.5, -0.5, -0.5], ub = [0.5, 0.5, 0.5])
+                            )
+
     # agent_dynamics = planar_double_integrator(;
     #     state_bounds = (; lb = [-Inf, -Inf, -50, -50], ub = [Inf, Inf, 50, 50]),
     #     control_bounds = (; lb = [-100, -100], ub = [100, 100]),
     # )
     
-    dynamics = ProductDynamics([agent_dynamics for _ in 1:2])
+    # dynamics = ProductDynamics([agent_dynamics for _ in 1:2])
+    dynamics = ProductDynamics([p_dynamics, e_dynamics])
 
     TrajectoryGame(dynamics, cost, environment, coupling_constraints)
 end
