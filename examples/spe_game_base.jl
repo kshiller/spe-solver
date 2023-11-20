@@ -48,6 +48,8 @@ using Makie: Makie
 using PATHSolver: PATHSolver
 using LinearAlgebra: norm_sqr, norm, dot, I
 using ProgressMeter: ProgressMeter
+using CSV: write
+using Plots: plot, savefig
 
 "Utility to set up a (two player) SPE game."
 function setup_trajectory_game(; environment = PolygonEnvironment(4, 300)) #TODO! find suitable default environment
@@ -68,7 +70,7 @@ function setup_trajectory_game(; environment = PolygonEnvironment(4, 300)) #TODO
             #: P1 (pursuer) wants to minimize cost, and P2 (evader) wants to maximize cost.
             [
                 cost,
-                -cost, #TODO! verify this is correct implementation
+                -cost,
             ]
 
             # # P1 wants to go fast, and P2 wants to be close to P1.
@@ -109,26 +111,23 @@ function setup_trajectory_game(; environment = PolygonEnvironment(4, 300)) #TODO
     B_cts           = zeros(6, 3)
     B_cts[4:6,1:3]  = Matrix(1I, 3, 3) #* 1/mass
 
-    #: Discretize dynamics
-    dt              = 1 # s (time step) #TODO! is this even legit? find timestep elsewhere
+    #: Discretize HCW dynamics
+    dt              = 5 # s (time step) ##### INPUT #####
     A_discrete      = Matrix(1I, 6, 6) + A_cts * dt
     B_discrete      = B_cts * dt
 
-    #TODO! verify dynamics implementation
-    #TODO! update state/control bounds as needed
-    agent_dynamics = time_invariant_linear_dynamics(; A=A_discrete, B=B_discrete,
-                            state_bounds = (; lb = [-Inf, -Inf, -Inf, -50, -50, -50], ub = [Inf, Inf, Inf, 50, 50, 50]),
-                            control_bounds = (; lb = [-1, -1, -1], ub = [1, 1, 1])
-                            )
+    #: Define dynamics for each player
+    p_ctrl_lim = 0.02 ##### INPUT #####
+    e_ctrl_lim = 0.5*p_ctrl_lim ##### INPUT #####
 
     p_dynamics = time_invariant_linear_dynamics(; A=A_discrete, B=B_discrete,
-                            state_bounds = (; lb = [-Inf, -Inf, -Inf, -50, -50, -50], ub = [Inf, Inf, Inf, 50, 50, 50]),
-                            control_bounds = (; lb = [-1, -1, -1], ub = [1, 1, 1])
+                            state_bounds = (; lb = [-Inf, -Inf, -Inf, -6, -6, -6], ub = [Inf, Inf, Inf, 6, 6, 6]),
+                            control_bounds = (; lb = -[p_ctrl_lim, p_ctrl_lim, p_ctrl_lim], ub = [p_ctrl_lim, p_ctrl_lim, p_ctrl_lim])
                             )
 
     e_dynamics = time_invariant_linear_dynamics(; A=A_discrete, B=B_discrete,
-                            state_bounds = (; lb = [-Inf, -Inf, -Inf, -50, -50, -50], ub = [Inf, Inf, Inf, 50, 50, 50]),
-                            control_bounds = (; lb = [-0.5, -0.5, -0.5], ub = [0.5, 0.5, 0.5])
+                            state_bounds = (; lb = [-Inf, -Inf, -Inf, -5, -5, -5], ub = [Inf, Inf, Inf, 5, 5, 5]),
+                            control_bounds = (; lb = -[e_ctrl_lim, e_ctrl_lim, e_ctrl_lim], ub = [e_ctrl_lim, e_ctrl_lim, e_ctrl_lim])
                             )
 
     # agent_dynamics = planar_double_integrator(;
@@ -371,16 +370,17 @@ function Makie.convert_arguments(::Type{<:Makie.Series}, γ::OpenLoopStrategy)
 end
 
 function main(;
-    initial_state = mortar([[5, 5, 5, 0.01, 0.01, 0.01], [0, 0, 0, 0, 0, 0]]),
+    initial_state = mortar([[50., 50., 50., 0.01, 0.01, 0.01], [0., 0., 0., 0., 0., 0.]]),
     horizon = 10, #TODO! update horizon (like sliding window horizon in MPC)
 )
-    environment = PolygonEnvironment(4, 25) #TODO! create proper environment
+    env_size = 1000 ##### INPUT #####
+    environment = PolygonEnvironment(4, env_size*sqrt(2))
     game = setup_trajectory_game(; environment)
     parametric_game = build_parametric_game(; game, horizon)
 
     turn_length = 3 #TODO! update turn length???
     sim_steps = let
-        n_sim_steps = 100 #TODO! update number of simulation steps
+        n_sim_steps = 200 ##### INPUT #####
         progress = ProgressMeter.Progress(n_sim_steps)
         receding_horizon_strategy =
             WarmStartRecedingHorizonStrategy(; game, parametric_game, turn_length, horizon)
@@ -395,6 +395,38 @@ function main(;
         )
     end
 
-    animate_sim_steps(game, sim_steps; live = false, framerate = 20, show_turn = true)
+    #: Extract game states and inputs from sim_steps
+    states, inputs, strategies = sim_steps
+    write("sim_results/states.csv", states)
+    write("sim_results/inputs.csv", inputs)
+
+    #: Parse states/inputs into pursuer and evader states/inputs
+    p_states = zeros(length(states), 6)
+    e_states = zeros(length(states), 6)
+    p_inputs = zeros(length(states), 3)
+    e_inputs = zeros(length(states), 3)
+
+    for ii in 1:length(states)
+        p_states[ii,:] = states[ii][1:6]
+        e_states[ii,:] = states[ii][7:12]
+        p_inputs[ii,:] = inputs[ii][1:3]
+        e_inputs[ii,:] = inputs[ii][4:6]
+    end
+    error_states = p_states - e_states
+    
+    #: Plot states/inputs
+    time = 0:0.5:(length(states)-1)*0.5
+    plot(time, p_states[:,1])
+    plot!(time, e_states[:,1])
+    savefig("sim_results/states_x.png")
+    plot(time, p_states[:,3])
+    plot!(time, e_states[:,3])
+    savefig("sim_results/states_z.png")
+    plot(time, error_states[:,4])
+    savefig("sim_results/states_error_vx.png")
+    plot(p_states[:,1], p_states[:,2], p_states[:,3], camera = (20, 30))
+    savefig("sim_results/states_xyz.png")
+
+    animate_sim_steps(game, sim_steps; live = false, framerate = 20, show_turn = true, xlims = (-env_size, env_size), ylims = (-env_size, env_size))
     (; sim_steps, game)
 end
