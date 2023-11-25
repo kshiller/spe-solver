@@ -55,17 +55,32 @@ using Plots: plot, plot!, savefig
 function setup_trajectory_game(; environment = PolygonEnvironment(4, 500))
     # PolygonEnvironment(num_sides, radius)
     #NOTE: The environment here inherently imposes state constraints and is used for visualization.
+
+    #: Define time step for simulation
+    dt = 5 # s (time step) ##### INPUT #####
+
     cost = let
         function stage_cost(x, u, t, θ)
-            x1, x2 = blocks(x)
-            u1, u2 = blocks(u)
+            x1, x2  = blocks(x)
+            u1, u2  = blocks(u)
+
+            #: Extract game state vector (x_p - x_e)
+            x_diff  = x1 - x2
 
             #: Define cost structure
             Q       = Matrix(1I, length(x1), length(x1)) ##### INPUT #####
             R       = Matrix(1I, length(u1), length(u1)) * 1e7 ##### INPUT #####
-            gam_sq  = 2
-            x_diff  = x1 - x2
-            cost    = x_diff' * Q * x_diff + u1' * R * u1 - gam_sq * u2' * R * u2
+            gam0_sq = 2
+            cost    = x_diff' * Q * x_diff + u1' * R * u1 - gam0_sq * u2' * R * u2
+
+            #: Define sun vector "dynamics"
+            sun_vec         = [0, 1, 0] # initial sun vector
+
+            #: Define sun angle cost
+            gam1            = 1
+            r_PE_unit       = x_diff[1:3] #/ norm(x_diff[1:3])
+            sun_angle_cost  = gam1 * -dot(r_PE_unit, sun_vec)
+            cost            += sun_angle_cost
 
             #: P1 (pursuer) wants to minimize cost, and P2 (evader) wants to maximize cost.
             [
@@ -106,7 +121,7 @@ function setup_trajectory_game(; environment = PolygonEnvironment(4, 500))
     B_cts[4:6,1:3]  = Matrix(1I, 3, 3) #* 1/mass
 
     #: Discretize HCW dynamics
-    dt              = 5 # s (time step) ##### INPUT #####
+    # dt              = 5 # s (time step) ##### INPUT #####
     A_discrete      = Matrix(1I, 6, 6) + A_cts * dt
     B_discrete      = B_cts * dt
 
@@ -366,14 +381,14 @@ function main(;
     initial_state = mortar([[50., 50., 50., 0.01, 0.01, 0.01], [0., 0., 0., 0., 0., 0.]]),
     horizon = 20, ##### INPUT #####
 )
-    env_size = 500 ##### INPUT #####
+    env_size = 200 ##### INPUT #####
     environment = PolygonEnvironment(4, env_size*sqrt(2))
     game = setup_trajectory_game(; environment)
     parametric_game = build_parametric_game(; game, horizon)
 
     turn_length = 3 ##### INPUT ##### TODO... unsure if we should change this
     sim_steps = let
-        n_sim_steps = 1000 ##### INPUT #####
+        n_sim_steps = 300 ##### INPUT #####
         progress = ProgressMeter.Progress(n_sim_steps)
         receding_horizon_strategy =
             WarmStartRecedingHorizonStrategy(; game, parametric_game, turn_length, horizon)
@@ -413,10 +428,13 @@ function main(;
     plot(time, p_states[:,1])
     plot!(time, e_states[:,1])
     savefig("sim_results/states_x.png")
+    plot(time, p_states[:,2])
+    plot!(time, e_states[:,2])
+    savefig("sim_results/states_y.png")
     plot(time, p_states[:,3])
     plot!(time, e_states[:,3])
     savefig("sim_results/states_z.png")
-    plot(time, error_states[:,4])
+    plot(time, error_states)
     savefig("sim_results/states_error_vx.png")
     plot(p_states[:,1], p_states[:,2], p_states[:,3], camera = (20, 30))
     savefig("sim_results/states_xyz.png")
