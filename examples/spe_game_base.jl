@@ -417,7 +417,7 @@ function main(;
     plot!(time, e_states[:,3])
     savefig("sim_results/states_z.png")
     plot(time, error_states[:,4])
-    savefig("sim_results/states_error_vx.png")
+    savefig("sim_results/states_error.png")
     plot(p_states[:,1], p_states[:,2], p_states[:,3], camera = (20, 30))
     savefig("sim_results/states_xyz.png")
     plot(time, p_inputs[:,1])

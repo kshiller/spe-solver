@@ -68,18 +68,19 @@ function setup_trajectory_game(; environment = PolygonEnvironment(4, 500))
             x_diff  = x1 - x2
 
             #: Define cost structure
-            Q       = Matrix(1I, length(x1), length(x1)) ##### INPUT #####
-            R       = Matrix(1I, length(u1), length(u1)) * 1e7 ##### INPUT #####
-            gam0_sq = 2
-            cost    = x_diff' * Q * x_diff + u1' * R * u1 - gam0_sq * u2' * R * u2
+            Q           = Matrix(1I, length(x1), length(x1)) ##### INPUT #####
+            Q[1:3,1:3]  = Matrix(1I, 3, 3) * 10 ##### INPUT #####
+            R           = Matrix(1I, length(u1), length(u1)) * 1e7 ##### INPUT #####
+            gam0_sq     = 2
+            cost        = x_diff' * Q * x_diff + u1' * R * u1 - gam0_sq * u2' * R * u2
 
             #: Define sun vector "dynamics"
-            sun_vec         = [0, 1, 0] # initial sun vector
+            unit_sun_vec    = [0, 1, 0] # initial sun vector
 
             #: Define sun angle cost
-            gam1            = 1
+            gam1            = 100
             r_PE_unit       = x_diff[1:3] #/ norm(x_diff[1:3])
-            sun_angle_cost  = gam1 * -dot(r_PE_unit, sun_vec)
+            sun_angle_cost  = gam1 * -dot(r_PE_unit, unit_sun_vec)
             cost            += sun_angle_cost
 
             #: P1 (pursuer) wants to minimize cost, and P2 (evader) wants to maximize cost.
@@ -126,7 +127,7 @@ function setup_trajectory_game(; environment = PolygonEnvironment(4, 500))
     B_discrete      = B_cts * dt
 
     #: Define dynamics for each player
-    p_ctrl_lim = 0.1 ##### INPUT #####
+    p_ctrl_lim = 0.01 ##### INPUT #####
     e_ctrl_lim = 0.5*p_ctrl_lim ##### INPUT #####
 
     p_dynamics = time_invariant_linear_dynamics(; A=A_discrete, B=B_discrete,
@@ -139,12 +140,6 @@ function setup_trajectory_game(; environment = PolygonEnvironment(4, 500))
                             control_bounds = (; lb = -[e_ctrl_lim, e_ctrl_lim, e_ctrl_lim], ub = [e_ctrl_lim, e_ctrl_lim, e_ctrl_lim])
                             )
 
-    # agent_dynamics = planar_double_integrator(;
-    #     state_bounds = (; lb = [-Inf, -Inf, -50, -50], ub = [Inf, Inf, 50, 50]),
-    #     control_bounds = (; lb = [-100, -100], ub = [100, 100]),
-    # )
-    
-    # dynamics = ProductDynamics([agent_dynamics for _ in 1:2])
     dynamics = ProductDynamics([p_dynamics, e_dynamics])
 
     TrajectoryGame(dynamics, cost, environment, coupling_constraints)
@@ -381,14 +376,14 @@ function main(;
     initial_state = mortar([[50., 50., 50., 0.01, 0.01, 0.01], [0., 0., 0., 0., 0., 0.]]),
     horizon = 20, ##### INPUT #####
 )
-    env_size = 200 ##### INPUT #####
+    env_size = 1000 ##### INPUT #####
     environment = PolygonEnvironment(4, env_size*sqrt(2))
     game = setup_trajectory_game(; environment)
     parametric_game = build_parametric_game(; game, horizon)
 
     turn_length = 3 ##### INPUT ##### TODO... unsure if we should change this
     sim_steps = let
-        n_sim_steps = 300 ##### INPUT #####
+        n_sim_steps = 300 ##### INPUT ##### Note: multiply by dt=5 to get total time
         progress = ProgressMeter.Progress(n_sim_steps)
         receding_horizon_strategy =
             WarmStartRecedingHorizonStrategy(; game, parametric_game, turn_length, horizon)
@@ -424,7 +419,7 @@ function main(;
     error_states = p_states - e_states
     
     #: Plot states/inputs
-    time = 0:0.5:(length(states)-1)*0.5
+    time = 0:5:(length(states)-1)*5
     plot(time, p_states[:,1])
     plot!(time, e_states[:,1])
     savefig("sim_results/states_x.png")
@@ -435,7 +430,7 @@ function main(;
     plot!(time, e_states[:,3])
     savefig("sim_results/states_z.png")
     plot(time, error_states)
-    savefig("sim_results/states_error_vx.png")
+    savefig("sim_results/states_error.png")
     plot(p_states[:,1], p_states[:,2], p_states[:,3], camera = (20, 30))
     savefig("sim_results/states_xyz.png")
     plot(time, p_inputs[:,1])
