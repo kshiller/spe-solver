@@ -16,6 +16,7 @@ Now exit package mode by hitting the `[delete]` key. You should see the regular 
 ```console
 julia> using Revise
 julia> using SPEsim
+julia> using Plots
 ```
 
 
