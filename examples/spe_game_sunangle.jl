@@ -69,18 +69,27 @@ function setup_trajectory_game(; environment = PolygonEnvironment(4, 500))
 
             #: Define cost structure
             Q           = Matrix(1I, length(x1), length(x1)) ##### INPUT #####
-            Q[1:3,1:3]  = Matrix(1I, 3, 3) * 10 ##### INPUT #####
+            Q[1:3,1:3]  = Matrix(1I, 3, 3) * 100 ##### INPUT #####
             R           = Matrix(1I, length(u1), length(u1)) * 1e7 ##### INPUT #####
             gam0_sq     = 2
             cost        = x_diff' * Q * x_diff + u1' * R * u1 - gam0_sq * u2' * R * u2
 
-            #: Define sun vector "dynamics"
-            unit_sun_vec    = [0, 1, 0] # initial sun vector
+            #: Virtual reference spacecraft orbital parameters
+            SMA             = 15000 # km (semi-major axis)
+            arg_latitude    = pi/2 # rad (90 deg, argument of latitude)
+            RAAN            = pi/4 # rad (45 deg, right ascension of ascending node)
+            inc             = pi/12 # rad (15 deg, inclination)
+
+            #: Define sun vector
+            sun_vec_I       = [1/sqrt(10), 3/sqrt(10), 0] # sun vector in inertial frame
+            R3_RAAN         = [cos(RAAN) -sin(RAAN) 0; sin(RAAN) cos(RAAN) 0; 0 0 1]
+            R1_inc          = [1 0 0; 0 cos(inc) -sin(inc); 0 sin(inc) cos(inc)]
+            R3_arg_lat      = [cos(arg_latitude) -sin(arg_latitude) 0; sin(arg_latitude) cos(arg_latitude) 0; 0 0 1]
+            sun_vec_L       = R3_arg_lat * R1_inc * R3_RAAN * sun_vec_I # sun vector in LVLH frame
 
             #: Define sun angle cost
-            gam1            = 100
-            r_PE_unit       = x_diff[1:3] #/ norm(x_diff[1:3])
-            sun_angle_cost  = gam1 * -dot(r_PE_unit, unit_sun_vec)
+            gam1            = 100 ##### INPUT #####
+            sun_angle_cost  = gam1 * -dot(x_diff[1:3], sun_vec_L) #/ norm(x_diff[1:3])
             cost            += sun_angle_cost
 
             #: P1 (pursuer) wants to minimize cost, and P2 (evader) wants to maximize cost.
@@ -122,21 +131,28 @@ function setup_trajectory_game(; environment = PolygonEnvironment(4, 500))
     B_cts[4:6,1:3]  = Matrix(1I, 3, 3) #* 1/mass
 
     #: Discretize HCW dynamics
-    # dt              = 5 # s (time step) ##### INPUT #####
     A_discrete      = Matrix(1I, 6, 6) + A_cts * dt
     B_discrete      = B_cts * dt
 
-    #: Define dynamics for each player
-    p_ctrl_lim = 0.01 ##### INPUT #####
-    e_ctrl_lim = 0.5*p_ctrl_lim ##### INPUT #####
+    #: Define state/input limits for each player ##### INPUT #####
+    pos_lim     = Inf                # m
+    # p_ctrl_lim  = 0.01                  # m/s^2
+    # e_ctrl_lim  = 0.5*p_ctrl_lim        # m/s^2
+    p_ctrl_lim  = 10                    # m/s^2
+    e_ctrl_lim  = 0.9*p_ctrl_lim        # m/s^2
+    p_vel_bound = 200                   # m/s
+    e_vel_bound = 0.9*p_vel_bound       # m/s
 
+    #: Define dynamics for each player
     p_dynamics = time_invariant_linear_dynamics(; A=A_discrete, B=B_discrete,
-                            state_bounds = (; lb = [-Inf, -Inf, -Inf, -6, -6, -6], ub = [Inf, Inf, Inf, 6, 6, 6]),
+                            state_bounds = (; lb = [-pos_lim, -pos_lim, -pos_lim, -p_vel_bound, -p_vel_bound, -p_vel_bound],
+                                              ub = [pos_lim, pos_lim, pos_lim, p_vel_bound, p_vel_bound, p_vel_bound]
+                                              ),
                             control_bounds = (; lb = -[p_ctrl_lim, p_ctrl_lim, p_ctrl_lim], ub = [p_ctrl_lim, p_ctrl_lim, p_ctrl_lim])
                             )
 
     e_dynamics = time_invariant_linear_dynamics(; A=A_discrete, B=B_discrete,
-                            state_bounds = (; lb = [-Inf, -Inf, -Inf, -5, -5, -5], ub = [Inf, Inf, Inf, 5, 5, 5]),
+                            state_bounds = (; lb = [-Inf, -Inf, -Inf, -e_vel_bound, -e_vel_bound, -e_vel_bound], ub = [Inf, Inf, Inf, e_vel_bound, e_vel_bound, e_vel_bound]),
                             control_bounds = (; lb = -[e_ctrl_lim, e_ctrl_lim, e_ctrl_lim], ub = [e_ctrl_lim, e_ctrl_lim, e_ctrl_lim])
                             )
 
@@ -373,17 +389,20 @@ function Makie.convert_arguments(::Type{<:Makie.Series}, γ::OpenLoopStrategy)
 end
 
 function main(;
-    initial_state = mortar([[50., 50., 50., 0.01, 0.01, 0.01], [0., 0., 0., 0., 0., 0.]]),
+    # initial_state = mortar([[50., 50., 50., 0.01, 0.01, 0.01], [0., 0., 0., 0., 0., 0.]]), ##### INPUT #####
+    # horizon = 20, ##### INPUT #####
+    initial_state = mortar([[6000., -8000., -3000., 0., 0., 0.], [0., 0., 0., 0., 0., 0.]]), ##### INPUT #####
     horizon = 20, ##### INPUT #####
 )
-    env_size = 1000 ##### INPUT #####
+    # env_size = 1000 ##### INPUT #####
+    env_size = 150000 ##### INPUT #####
     environment = PolygonEnvironment(4, env_size*sqrt(2))
     game = setup_trajectory_game(; environment)
     parametric_game = build_parametric_game(; game, horizon)
 
-    turn_length = 3 ##### INPUT ##### TODO... unsure if we should change this
+    turn_length = 3 ##### INPUT ##### unsure if we should change this
     sim_steps = let
-        n_sim_steps = 300 ##### INPUT ##### Note: multiply by dt=5 to get total time
+        n_sim_steps = 100 ##### INPUT ##### Note: multiply by dt=5 to get total time
         progress = ProgressMeter.Progress(n_sim_steps)
         receding_horizon_strategy =
             WarmStartRecedingHorizonStrategy(; game, parametric_game, turn_length, horizon)
@@ -396,7 +415,7 @@ function main(;
             get_info = (γ, x, t) ->
                 (ProgressMeter.next!(progress); γ.receding_horizon_strategy),
         )
-        #TODO: add if statement to check if rendezvous is achieved??? If so, break out of loop and return sim_steps
+        # add if statement to check if rendezvous is achieved??? If so, break out of loop and return sim_steps
     end
 
     #: Extract game states and inputs from sim_steps
@@ -404,38 +423,67 @@ function main(;
     write("sim_results/states.csv", states)
     write("sim_results/inputs.csv", inputs)
 
+    #: Define constant sun vector (again) for extracting sun angle throughout engagement
+    arg_latitude    = pi/2 # rad (90 deg, argument of latitude)
+    RAAN            = pi/4 # rad (45 deg, right ascension of ascending node)
+    inc             = pi/12 # rad (15 deg, inclination)
+    sun_vec_I       = [1/sqrt(10), 3/sqrt(10), 0] # sun vector in inertial frame
+    R3_RAAN         = [cos(RAAN) -sin(RAAN) 0; sin(RAAN) cos(RAAN) 0; 0 0 1]
+    R1_inc          = [1 0 0; 0 cos(inc) -sin(inc); 0 sin(inc) cos(inc)]
+    R3_arg_lat      = [cos(arg_latitude) -sin(arg_latitude) 0; sin(arg_latitude) cos(arg_latitude) 0; 0 0 1]
+    sun_vec_L       = R3_arg_lat * R1_inc * R3_RAAN * sun_vec_I # sun vector in LVLH frame
+
     #: Parse states/inputs into pursuer and evader states/inputs
-    p_states = zeros(length(states), 6)
-    e_states = zeros(length(states), 6)
-    p_inputs = zeros(length(states), 3)
-    e_inputs = zeros(length(states), 3)
+    p_states    = zeros(length(states), 6)
+    e_states    = zeros(length(states), 6)
+    p_inputs    = zeros(length(states), 3)
+    e_inputs    = zeros(length(states), 3)
+    sun_angles  = zeros(length(states), 1)
 
     for ii in 1:length(states)
         p_states[ii,:] = states[ii][1:6]
         e_states[ii,:] = states[ii][7:12]
         p_inputs[ii,:] = inputs[ii][1:3]
         e_inputs[ii,:] = inputs[ii][4:6]
+        # sun_angles[ii] = dot(p_states[ii,1:3]-e_states[ii,1:3], sun_vec_L) / norm(p_states[ii,1:3]-e_states[ii,1:3])
     end
-    error_states = p_states - e_states
+    error_states    = p_states - e_states
+    sun_angles      = [acosd(-dot(error_states[ii,1:3], sun_vec_L) / norm(error_states[ii,1:3])) for ii in 1:length(states)]
     
     #: Plot states/inputs
     time = 0:5:(length(states)-1)*5
-    plot(time, p_states[:,1])
-    plot!(time, e_states[:,1])
-    savefig("sim_results/states_x.png")
-    plot(time, p_states[:,2])
-    plot!(time, e_states[:,2])
-    savefig("sim_results/states_y.png")
-    plot(time, p_states[:,3])
-    plot!(time, e_states[:,3])
-    savefig("sim_results/states_z.png")
-    plot(time, error_states)
-    savefig("sim_results/states_error.png")
-    plot(p_states[:,1], p_states[:,2], p_states[:,3], camera = (20, 30))
-    savefig("sim_results/states_xyz.png")
-    plot(time, p_inputs[:,1])
-    plot!(time, e_inputs[:,1])
-    savefig("sim_results/inputs_x.png")
+    plot(time, p_states[:,1:3])
+    plot!(time, e_states[:,1:3])
+    savefig("sim_results/spe_sun_player_range_states.png")
+    plot(time, error_states[:,1:3])
+    savefig("sim_results/spe_sun_range_error_range_states.png")
+    plot(p_states[:,1], p_states[:,2], p_states[:,3], color = :red, label = "Pursuer", camera = (30, 20))
+    plot!(e_states[:,1], e_states[:,2], e_states[:,3], color = :blue, label = "Evader")
+    plot!((p_states[1,1], p_states[1,2], p_states[1,3]), marker = :circle, markersize = 3, color = :red, label = "Pursuer Initial State")
+    plot!((e_states[1,1], e_states[1,2], e_states[1,3]), marker = :circle, markersize = 3, color = :blue, label = "Evader Initial State")
+    savefig("sim_results/spe_sun_3d_plot.png")
+    plot(time, p_inputs)
+    savefig("sim_results/spe_sun_pursuer_inputs.png")
+    plot(time, e_inputs)
+    savefig("sim_results/spe_sun_evader_inputs.png")
+    plot(time, sun_angles)
+    savefig("sim_results/spe_sun_sunangles.png")
+
+    anim = @animate for ii in 1:length(states)
+        plot(p_states[:,1], p_states[:,2], p_states[:,3], color = :red, label = "Pursuer Path", camera = (20, 20))
+        plot!(e_states[:,1], e_states[:,2], e_states[:,3], color = :blue, label = "Evader Path")
+        plot!((p_states[ii,1], p_states[ii,2], p_states[ii,3]), marker = :circle, markersize = 3, color = :red, label = "Pursuer")
+        plot!((e_states[ii,1], e_states[ii,2], e_states[ii,3]), marker = :circle, markersize = 3, color = :blue, label = "Evader")
+    end
+    gif(anim, "sim_results/spe_sun_capture.gif", fps = 20)
+
+    anim2 = @animate for ii in 1:2:360
+        plot(p_states[:,1], p_states[:,2], p_states[:,3], color = :red, label = "Pursuer", camera = (ii, 10))
+        plot!(e_states[:,1], e_states[:,2], e_states[:,3], color = :blue, label = "Evader")
+        plot!((p_states[1,1], p_states[1,2], p_states[1,3]), marker = :circle, markersize = 3, color = :red, label = "Evader Initial State")
+        plot!((e_states[1,1], e_states[1,2], e_states[1,3]), marker = :circle, markersize = 3, color = :blue, label = "Evader Initial State")
+    end
+    gif(anim2, "sim_results/spe_sun_360.gif", fps = 35)
 
     animate_sim_steps(game, sim_steps; live = false, framerate = 20, show_turn = true, xlims = (-env_size, env_size), ylims = (-env_size, env_size))
     (; sim_steps, game)

@@ -49,7 +49,7 @@ using PATHSolver: PATHSolver
 using LinearAlgebra: norm_sqr, norm, dot, I
 using ProgressMeter: ProgressMeter
 using CSV: write
-using Plots: plot, plot!, savefig
+using Plots
 
 "Utility to set up a (two player) SPE game."
 function setup_trajectory_game(; environment = PolygonEnvironment(4, 500))
