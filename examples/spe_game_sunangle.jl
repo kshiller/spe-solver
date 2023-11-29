@@ -136,7 +136,7 @@ function setup_trajectory_game(; environment = PolygonEnvironment(4, 500))
 
     #: Define state/input limits for each player ##### INPUT #####
     p_pos_lim   = Inf                # m
-    e_pos_lim   = Inf                # m
+    e_pos_lim   = 1000 #Inf                # m
     # p_ctrl_lim  = 0.01                  # m/s^2
     # e_ctrl_lim  = 0.5*p_ctrl_lim        # m/s^2
     p_ctrl_lim  = 10                    # m/s^2
@@ -396,8 +396,8 @@ function main(;
     initial_state = mortar([[6000., -8000., -3000., 0., 0., 0.], [0., 0., 0., 0., 0., 0.]]), ##### INPUT #####
     horizon = 20, ##### INPUT #####
 )
-    # env_size = 1000 ##### INPUT #####
-    env_size = 110000 ##### INPUT #####
+    env_size = 10000 ##### INPUT #####
+    # env_size = 120000 ##### INPUT #####
     environment = PolygonEnvironment(4, env_size*sqrt(2))
     game = setup_trajectory_game(; environment)
     parametric_game = build_parametric_game(; game, horizon)
@@ -460,36 +460,42 @@ function main(;
     
     #: Plot states/inputs
     time = 0:5:(length(states)-1)*5
-    plot(time, p_states[:,1:3])
-    plot!(time, e_states[:,1:3])
+
+    plot(time, p_states[:,1:3]/1000, xlabel = "Time [s]", ylabel = "Position [km]", label = ["x_p" "y_p" "z_p"], title = "Pursuer vs Evader Position")
+    plot!(time, e_states[:,1:3]/1000, label = ["x_e" "y_e" "z_e"])
     savefig("sim_results/spe_sun_player_range_states.png")
-    plot(time, error_states[:,1:3])
+
+    plot(time, error_states[:,1:3]/1000, xlabel = "Time [s]", ylabel = "Position Error [km]", label = ["x" "y" "z"], title = "Position Error")
     savefig("sim_results/spe_sun_range_error_range_states.png")
-    plot(p_states[:,1], p_states[:,2], p_states[:,3], color = :red, label = "Pursuer", camera = (70, 20))
-    plot!(e_states[:,1], e_states[:,2], e_states[:,3], color = :blue, label = "Evader")
-    plot!((p_states[1,1], p_states[1,2], p_states[1,3]), marker = :circle, markersize = 3, color = :red, label = "Pursuer Initial State")
-    plot!((e_states[1,1], e_states[1,2], e_states[1,3]), marker = :circle, markersize = 3, color = :blue, label = "Evader Initial State")
+
+    plot(p_states[:,1]/1000, p_states[:,2]/1000, p_states[:,3]/1000, color = :red, label = "Pursuer", camera = (70, 20), title = "Pursuer vs Evader Trajectories")
+    plot!(e_states[:,1]/1000, e_states[:,2]/1000, e_states[:,3]/1000, color = :blue, label = "Evader", xlabel = "x [km]", ylabel = "y [km]", zlabel = "z [km]")
+    plot!((p_states[1,1]/1000, p_states[1,2]/1000, p_states[1,3]/1000), marker = :circle, markersize = 3, color = :red, label = "Pursuer Initial State")
+    plot!((e_states[1,1]/1000, e_states[1,2]/1000, e_states[1,3]/1000), marker = :circle, markersize = 3, color = :blue, label = "Evader Initial State")
     savefig("sim_results/spe_sun_3d_plot.png")
-    plot(time, p_inputs)
+
+    plot(time, p_inputs, xlabel = "Time [s]", ylabel = "Inputs [N/kg]", label = ["u_x" "u_y" "u_z"], title = "Pursuer Inputs")
     savefig("sim_results/spe_sun_pursuer_inputs.png")
-    plot(time, e_inputs)
+
+    plot(time, e_inputs, xlabel = "Time [s]", ylabel = "Inputs [N/kg]", label = ["u_x" "u_y" "u_z"], title = "Evader Inputs")
     savefig("sim_results/spe_sun_evader_inputs.png")
-    plot(time, sun_angles)
+
+    plot(time, sun_angles, xlabel = "Time [s]", ylabel = "Relative Sun Angle [deg]", title = "Relative Sun Angle")
     savefig("sim_results/spe_sun_sunangles.png")
 
     anim = @animate for ii in 1:length(states)
-        plot(p_states[:,1], p_states[:,2], p_states[:,3], color = :red, label = "Pursuer Path", camera = (70, 20))
-        plot!(e_states[:,1], e_states[:,2], e_states[:,3], color = :blue, label = "Evader Path")
-        plot!((p_states[ii,1], p_states[ii,2], p_states[ii,3]), marker = :circle, markersize = 3, color = :red, label = "Pursuer")
-        plot!((e_states[ii,1], e_states[ii,2], e_states[ii,3]), marker = :circle, markersize = 3, color = :blue, label = "Evader")
+        plot(p_states[:,1]/1000, p_states[:,2]/1000, p_states[:,3]/1000, color = :red, camera = (70, 20), title = "Pursuer vs Evader Trajectories")
+        plot!(e_states[:,1]/1000, e_states[:,2]/1000, e_states[:,3]/1000, color = :blue, xlabel = "x [km]", ylabel = "y [km]", zlabel = "z [km]")
+        plot!((p_states[ii,1]/1000, p_states[ii,2]/1000, p_states[ii,3]/1000), marker = :circle, markersize = 3, color = :red, label = "Pursuer")
+        plot!((e_states[ii,1]/1000, e_states[ii,2]/1000, e_states[ii,3]/1000), marker = :circle, markersize = 3, color = :blue, label = "Evader")
     end
     gif(anim, "sim_results/spe_sun_capture.gif", fps = 20)
 
     anim2 = @animate for ii in 1:2:360
-        plot(p_states[:,1], p_states[:,2], p_states[:,3], color = :red, label = "Pursuer", camera = (ii, 10))
-        plot!(e_states[:,1], e_states[:,2], e_states[:,3], color = :blue, label = "Evader")
-        plot!((p_states[1,1], p_states[1,2], p_states[1,3]), marker = :circle, markersize = 3, color = :red, label = "Evader Initial State")
-        plot!((e_states[1,1], e_states[1,2], e_states[1,3]), marker = :circle, markersize = 3, color = :blue, label = "Evader Initial State")
+        plot(p_states[:,1]/1000, p_states[:,2]/1000, p_states[:,3]/1000, color = :red, label = "Pursuer", camera = (ii, 10), title = "Pursuer vs Evader Trajectories")
+        plot!(e_states[:,1]/1000, e_states[:,2]/1000, e_states[:,3]/1000, color = :blue, label = "Evader", xlabel = "x [km]", ylabel = "y [km]", zlabel = "z [km]")
+        plot!((p_states[1,1]/1000, p_states[1,2]/1000, p_states[1,3]/1000), marker = :circle, markersize = 3, color = :red, label = "Evader Initial State")
+        plot!((e_states[1,1]/1000, e_states[1,2]/1000, e_states[1,3]/1000), marker = :circle, markersize = 3, color = :blue, label = "Evader Initial State")
     end
     gif(anim2, "sim_results/spe_sun_360.gif", fps = 35)
 
