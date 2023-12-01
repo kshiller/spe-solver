@@ -136,7 +136,8 @@ function setup_trajectory_game(; environment = PolygonEnvironment(4, 500))
 
     #: Define state/input limits for each player ##### INPUT #####
     p_pos_lim   = Inf                # m
-    e_pos_lim   = 1000 #Inf                # m
+    # e_pos_lim   = Inf                # m
+    e_pos_lim   = 1000                # m
     # p_ctrl_lim  = 0.01                  # m/s^2
     # e_ctrl_lim  = 0.5*p_ctrl_lim        # m/s^2
     p_ctrl_lim  = 10                    # m/s^2
@@ -397,7 +398,7 @@ function main(;
     horizon = 20, ##### INPUT #####
 )
     env_size = 10000 ##### INPUT #####
-    # env_size = 120000 ##### INPUT #####
+    env_size = 120000 ##### INPUT #####
     environment = PolygonEnvironment(4, env_size*sqrt(2))
     game = setup_trajectory_game(; environment)
     parametric_game = build_parametric_game(; game, horizon)
@@ -434,7 +435,6 @@ function main(;
     R1_inc          = [1 0 0; 0 cos(inc) -sin(inc); 0 sin(inc) cos(inc)]
     R3_arg_lat      = [cos(arg_latitude) -sin(arg_latitude) 0; sin(arg_latitude) cos(arg_latitude) 0; 0 0 1]
     sun_vec_L       = R3_arg_lat * R1_inc * R3_RAAN * sun_vec_I # sun vector in LVLH frame
-    println("Sun vector (LVLH): ", sun_vec_L)
 
     #: Parse states/inputs into pursuer and evader states/inputs
     p_states    = zeros(length(states), 6)
@@ -453,10 +453,23 @@ function main(;
     error_states    = p_states - e_states
     sun_angles      = [acosd(dot(error_states[ii,1:3], sun_vec_L) / norm(error_states[ii,1:3])) for ii in 1:length(states)]
 
-    println("Final x error: ", error_states[end,1])
-    println("Final y error: ", error_states[end,2])
-    println("Final z error: ", error_states[end,3])
-    println("Final range error: ", norm(error_states[end,1:3]))
+    #: Save key info to txt file
+    open("sim_results/stats.txt", "w") do f
+
+        println(f, "Sun vector (LVLH):       ", sun_vec_L)
+
+        #: Compute rendezvous error
+        println(f, "Final range error:       ", error_states[end,1:3])
+        println(f, "Rendezvous error:        ", norm(error_states[end,1:3]))
+
+        println(f, "Final velocity error:    ", error_states[end,4:6])
+        println(f, "Final velocity error:    ", norm(error_states[end,4:6]))
+
+        #: Compute total control effort
+        println(f, "Pursuer control effort:  ", sum([norm(p_inputs[ii,:]) for ii in 1:length(states)]))
+        println(f, "Evader control effort:   ", sum([norm(e_inputs[ii,:]) for ii in 1:length(states)]))
+    
+    end
     
     #: Plot states/inputs
     time = 0:5:(length(states)-1)*5
@@ -501,4 +514,5 @@ function main(;
 
     animate_sim_steps(game, sim_steps; live = false, framerate = 20, show_turn = true, xlims = (-env_size, env_size), ylims = (-env_size, env_size))
     (; sim_steps, game)
+
 end
