@@ -137,13 +137,13 @@ function setup_trajectory_game(; environment = PolygonEnvironment(4, 500))
     #: Define state/input limits for each player ##### INPUT #####
     p_pos_lim   = Inf                # m
     # e_pos_lim   = Inf                # m
-    e_pos_lim   = 1000                # m
+    e_pos_lim   = 1500                # m
     # p_ctrl_lim  = 0.01                  # m/s^2
     # e_ctrl_lim  = 0.5*p_ctrl_lim        # m/s^2
     p_ctrl_lim  = 10                    # m/s^2
-    e_ctrl_lim  = 0.9*p_ctrl_lim        # m/s^2
+    e_ctrl_lim  = 1.9*p_ctrl_lim        # m/s^2
     p_vel_bound = 200                   # m/s
-    e_vel_bound = 0.9*p_vel_bound       # m/s
+    e_vel_bound = 1.9*p_vel_bound       # m/s
 
     #: Define dynamics for each player
     p_dynamics = time_invariant_linear_dynamics(; A=A_discrete, B=B_discrete,
@@ -397,7 +397,7 @@ function main(;
     initial_state = mortar([[6000., -8000., -3000., 0., 0., 0.], [0., 0., 0., 0., 0., 0.]]), ##### INPUT #####
     horizon = 20, ##### INPUT #####
 )
-    env_size = 10000 ##### INPUT #####
+    # env_size = 10000 ##### INPUT #####
     env_size = 120000 ##### INPUT #####
     environment = PolygonEnvironment(4, env_size*sqrt(2))
     game = setup_trajectory_game(; environment)
